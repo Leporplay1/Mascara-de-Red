@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Analizador de IP y Máscara</title>
+  <style>
+    body { font-family: sans-serif; background: #f5f7fa; margin: 20px; }
+    h2 { color: #333; }
+    .container { display: flex; justify-content: space-around; margin-bottom: 20px; flex-wrap: wrap; gap: 20px; }
+    .octeto, .ip-analyzer { background: #e9eef5; padding: 10px; border-radius: 8px; box-shadow: 0 0 4px #ccc; text-align: center; }
+    .bit-label { display: inline-block; width: 24px; font-size: 12px; color: #555; }
+    .bit-box { margin-top: 5px; margin-bottom: 5px; }
+    .decimal-box { background: white; border: 1px solid #ccc; padding: 5px 10px; border-radius: 5px; display: inline-block; min-width: 40px; margin-top: 5px; }
+    .info { margin-top: 20px; background: #f0fff0; padding: 15px; border-radius: 8px; border: 1px solid #cde; }
+    button { margin-top: 10px; padding: 10px 20px; border: none; background: #4caf50; color: white; border-radius: 5px; font-weight: bold; cursor: pointer; }
+    button:hover { background: #45a049; }
+    input[type="text"] { padding: 8px; width: 180px; font-size: 16px; margin-top: 10px; }
+
+    #logo-container {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+    #logo {
+  width: 80px; /* ajusta el tamaño según tu imagen */
+  height: auto;
+  opacity: 0.9;
+}
+  </style>
+</head>
+<body>
+     <div id="logo-container">
+    <img src="images/logo.png" alt="Logo" id="logo">
+  </div>
+<center>
+  <h2>Editor Visual de Máscara de Subred + Analizador de IP</h2>
+</center>
+<center>
+  <h3>
+  Herramienta interactiva para análisis de redes IP. 
+  Permite construir máscaras de subred bit a bit, calcular su CIDR,</h3>
+  <h3>
+  visualizar rangos de direcciones utilizables, y analizar cualquier dirección IP
+  para determinar su clase,</h3>
+  <h3> tipo (pública, privada o especial), máscara recomendada,
+  y rango de red y broadcast.
+</h3>
+</center>
+  <div class="container" id="octetos"></div>
+
+  <div style="text-align:center;">
+    <button onclick="calcularCIDR()">Calcular CIDR y rangos</button>
+  </div>
+   <!-- Resultado del cálculo CIDR -->
+<div class="info" id="resultado"></div>
+
+<!-- Separador visual -->
+<hr style="margin: 30px 0; border: none; border-top: 2px dashed #ccc;">
+
+<!-- Sección separada para analizar IP -->
+<div class="ip-analyzer">
+  <h3>Analizar Dirección IP</h3>
+  <input type="text" id="ipInput" placeholder="Ej: 192.168.1.1"><br>
+  <button onclick="analizarIP()">Analizar IP</button>
+  <div class="info" id="ipResultado"></div>
+</div>
+
+  <div class="container">
+ 
+  </div>
+  <div class="info" id="resultado"></div>
+
+  <script>
+    const contenedor = document.getElementById('octetos');
+
+    for (let o = 0; o < 4; o++) {
+      const octetoDiv = document.createElement('div');
+      octetoDiv.className = 'octeto';
+      octetoDiv.innerHTML = `<div><strong>Octeto ${o + 1}</strong></div>`;
+
+      let header = '';
+      [128, 64, 32, 16, 8, 4, 2, 1].forEach(val => {
+        header += `<span class="bit-label">${val}</span>`;
+      });
+      octetoDiv.innerHTML += `<div class="bit-label-row">${header}</div>`;
+
+      let checkboxes = '<div class="bit-box">';
+      for (let b = 0; b < 8; b++) {
+        checkboxes += `<input type="checkbox" id="bit_${o}_${b}" onchange="actualizarOcteto(${o})">`;
+      }
+      checkboxes += '</div>';
+      octetoDiv.innerHTML += checkboxes;
+
+      octetoDiv.innerHTML += `<div><span id="valor_${o}" class="decimal-box">0</span></div>`;
+      contenedor.appendChild(octetoDiv);
+    }
+
+    function actualizarOcteto(octeto) {
+      let valor = 0;
+      for (let b = 0; b < 8; b++) {
+        const check = document.getElementById(`bit_${octeto}_${b}`);
+        if (check.checked) valor += Math.pow(2, 7 - b);
+      }
+      document.getElementById(`valor_${octeto}`).textContent = valor;
+    }
+
+    function calcularCIDR() {
+      let bits = 0;
+      let octetos = [];
+
+      for (let o = 0; o < 4; o++) {
+        let valorOcteto = 0;
+        for (let b = 0; b < 8; b++) {
+          const check = document.getElementById(`bit_${o}_${b}`);
+          if (check.checked) {
+            valorOcteto += Math.pow(2, 7 - b);
+            bits++;
+          }
+        }
+        octetos.push(valorOcteto);
+        document.getElementById(`valor_${o}`).textContent = valorOcteto;
+      }
+
+      const mascara = octetos.join('.');
+      const cidr = `/${bits}`;
+
+      let clase = '', infoExtra = '';
+
+      if (bits >= 8 && bits <= 15) {
+        clase = 'Clase A';
+        infoExtra = "🌐 Público: 1.0.0.0 – 126.255.255.255<br>" +
+                    "🏠 Privado: 10.0.0.0 – 10.255.255.255<br>" +
+                    "❌ Excluido: 127.0.0.0/8 (Loopback)<br>" +
+                    "<strong>👉 Público efectivo:</strong><br>" +
+                    "1.0.0.0 – 9.255.255.255<br>" +
+                    "11.0.0.0 – 126.255.255.255";
+      } else if (bits >= 16 && bits <= 23) {
+        clase = 'Clase B';
+        infoExtra = "🌐 Público: 128.0.0.0 – 191.255.255.255<br>" +
+                    "🏠 Privado: 172.16.0.0 – 172.31.255.255<br>" +
+                    "❌ Excluido: 169.254.0.0/16 (APIPA)";
+      } else if (bits >= 24 && bits <= 30) {
+        clase = 'Clase C';
+        infoExtra = "🌐 Público: 192.0.0.0 – 223.255.255.255<br>" +
+                    "🏠 Privado: 192.168.0.0 – 192.168.255.255<br>" +
+                    "❌ Excluido: Multicast y reservados";
+      } else {
+        clase = 'No estándar';
+        infoExtra = "⚠️ No aplicable a rangos convencionales.";
+      }
+
+      const ipBase = "192.168.0.0";
+      const [a,b,c,d] = ipBase.split('.').map(x => parseInt(x));
+
+      const totalHosts = Math.pow(2, 32 - bits);
+      const usableHosts = bits >= 31 ? 0 : totalHosts - 2;
+      const baseInt = (a<<24) + (b<<16) + (c<<8) + d;
+
+      const inicio = baseInt;
+      const fin = baseInt + totalHosts - 1;
+
+      const ipInicio = [(inicio >>> 24)&255, (inicio >>> 16)&255, (inicio >>> 8)&255, inicio & 255].join('.');
+      const ipFin = [(fin >>> 24)&255, (fin >>> 16)&255, (fin >>> 8)&255, fin & 255].join('.');
+
+      let ipUsableStart = bits >= 31 ? "No aplica" : [(inicio+1 >>> 24)&255, (inicio+1 >>> 16)&255, (inicio+1 >>> 8)&255, (inicio+1)&255].join('.');
+      let ipUsableEnd = bits >= 31 ? "No aplica" : [(fin-1 >>> 24)&255, (fin-1 >>> 16)&255, (fin-1 >>> 8)&255, (fin-1)&255].join('.');
+
+      document.getElementById('resultado').innerHTML = 
+        `<strong>Máscara:</strong> ${mascara}<br>` +
+        `<strong>CIDR:</strong> ${cidr}<br>` +
+        `<strong>Clase IP:</strong> ${clase}<br>` +
+        `<div>${infoExtra}</div><br>` +
+        `<strong>Total IPs:</strong> ${totalHosts}<br>` +
+        `<strong>Hosts utilizables:</strong> ${usableHosts}<br>` +
+        `<strong>Rango total:</strong> ${ipInicio} – ${ipFin}<br>` +
+        `<strong>Rango de hosts:</strong> ${ipUsableStart} – ${ipUsableEnd}`;
+    }
+
+    function analizarIP() {
+  const ip = document.getElementById("ipInput").value.trim();
+  const partes = ip.split('.').map(x => parseInt(x));
+
+  if (partes.length !== 4 || partes.some(n => isNaN(n) || n < 0 || n > 255)) {
+    document.getElementById("ipResultado").innerHTML = "❌ Dirección IP inválida.";
+    return;
+  }
+
+  const [a, b] = partes;
+  let clase = "", tipo = "", mascara = "", cidr = "";
+
+  if (a >= 1 && a <= 126) {
+    clase = "A";
+    cidr = "/8";
+    mascara = "255.0.0.0";
+
+    if (a === 10) tipo = "Privada";
+    else if (a === 127) tipo = "Especial (Loopback)";
+    else tipo = "Pública";
+
+  } else if (a >= 128 && a <= 191) {
+    clase = "B";
+    cidr = "/16";
+    mascara = "255.255.0.0";
+
+    if (a === 169 && b === 254) tipo = "Especial (APIPA)";
+    else if (a === 172 && b >= 16 && b <= 31) tipo = "Privada";
+    else tipo = "Pública";
+
+  } else if (a >= 192 && a <= 223) {
+    clase = "C";
+    cidr = "/24";
+    mascara = "255.255.255.0";
+
+    if (a === 192 && b === 168) tipo = "Privada";
+    else tipo = "Pública";
+
+  } else if (a >= 224 && a <= 239) {
+    clase = "D";
+    tipo = "Especial (Multicast)";
+    cidr = "N/A"; mascara = "N/A";
+
+  } else if (a >= 240 && a <= 255) {
+    clase = "E";
+    tipo = "Especial (Reservado)";
+    cidr = "N/A"; mascara = "N/A";
+
+  } else {
+    clase = "Desconocida";
+    tipo = "No identificable";
+    cidr = "N/A"; mascara = "N/A";
+  }
+
+  document.getElementById("ipResultado").innerHTML = 
+    `<strong>Dirección IP:</strong> ${ip}<br>` +
+    `<strong>Clase:</strong> ${clase}<br>` +
+    `<strong>Tipo:</strong> ${tipo}<br>` +
+    `<strong>Máscara recomendada:</strong> ${mascara}<br>` +
+    `<strong>CIDR estándar:</strong> ${cidr}`;
+}
+</script>
+
+</body>
+</html>
